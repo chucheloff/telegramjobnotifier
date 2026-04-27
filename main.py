@@ -1,3 +1,8 @@
+"""Entry point for running the bot standalone.
+
+This module is deprecated. Use `uv run bot.main` instead.
+"""
+
 import asyncio
 import logging
 
