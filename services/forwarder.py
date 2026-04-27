@@ -25,7 +25,10 @@ async def forward_to_channels(
     Returns:
         List of dicts with 'channel_id' and 'message_id' of forwarded messages.
     """
-    targets = channel_ids or CHANNEL_IDS
+    if channel_ids is None:
+        targets = CHANNEL_IDS
+    else:
+        targets = channel_ids
     results: list[dict] = []
 
     for target_id in targets:

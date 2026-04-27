@@ -108,3 +108,109 @@ class TestGetRecentUsers:
     def test_empty_users(self):
         users = db.get_recent_users()
         assert len(users) == 0
+
+
+class TestSaveServerMessage:
+    def test_save_server_message(self):
+        msg_id = db.save_server_message(
+            text="API message",
+            user_id=555,
+            chat_id=666,
+            forward_immediately=True,
+        )
+        assert msg_id == 1
+        msg = db.get_message_by_id(msg_id)
+        assert msg["message_text"] == "API message"
+        assert msg["status"] == "pending"
+        assert msg["forward_immediately"] == 1
+
+    def test_save_server_message_not_immediate(self):
+        msg_id = db.save_server_message(
+            text="Queue this",
+            user_id=555,
+            chat_id=666,
+            forward_immediately=False,
+        )
+        msg = db.get_message_by_id(msg_id)
+        assert msg["forward_immediately"] == 0
+
+
+class TestGetMessagesWithFilters:
+    def test_filter_by_status(self):
+        db.save_server_message("pending1", 1, 2, forward_immediately=True)
+        db.save_server_message("pending2", 3, 4, forward_immediately=True)
+        db.forward_message(1, [-1001])
+
+        pending = db.get_messages_with_filters(status="pending")
+        forwarded = db.get_messages_with_filters(status="forwarded")
+
+        assert len(pending) == 1
+        assert len(forwarded) == 1
+        assert forwarded[0]["message_text"] == "pending1"
+
+    def test_filter_by_date_range(self):
+        db.save_server_message("old", 1, 2)
+        db.save_server_message("new", 3, 4)
+
+        all_msgs = db.get_messages_with_filters()
+        assert len(all_msgs) == 2
+
+    def test_filter_combined(self):
+        db.save_server_message("msg1", 1, 2)
+        db.save_server_message("msg2", 3, 4)
+
+        result = db.get_messages_with_filters(status="pending", limit=1)
+        assert len(result) == 1
+
+
+class TestGetMessageById:
+    def test_get_existing(self):
+        msg_id = db.save_message(10, 20, "exists")
+        msg = db.get_message_by_id(msg_id)
+        assert msg is not None
+        assert msg["message_text"] == "exists"
+        assert msg["user_id"] == 10
+
+    def test_get_nonexistent(self):
+        msg = db.get_message_by_id(99999)
+        assert msg is None
+
+
+class TestEditMessage:
+    def test_edit_existing(self):
+        msg_id = db.save_message(1, 2, "original")
+        result = db.edit_message(msg_id, "edited text")
+        assert result is True
+        msg = db.get_message_by_id(msg_id)
+        assert msg["edited_text"] == "edited text"
+        assert msg["status"] == "pending"
+
+    def test_edit_nonexistent(self):
+        result = db.edit_message(99999, "nope")
+        assert result is False
+
+
+class TestForwardMessage:
+    def test_forward_message(self):
+        msg_id = db.save_server_message("to forward", 1, 2)
+        result = db.forward_message(msg_id, [-1001, -1002])
+        assert result["status"] == "forwarded"
+        assert result["message_id"] == msg_id
+        assert result["channel_ids"] == [-1001, -1002]
+
+        msg = db.get_message_by_id(msg_id)
+        assert msg["status"] == "forwarded"
+        assert msg["forwarded_to_channels"] == "-1001,-1002"
+
+
+class TestUpdateMessageStatus:
+    def test_update_status(self):
+        msg_id = db.save_server_message("test", 1, 2)
+        result = db.update_message_status(msg_id, "failed")
+        assert result is True
+        msg = db.get_message_by_id(msg_id)
+        assert msg["status"] == "failed"
+
+    def test_update_nonexistent(self):
+        result = db.update_message_status(99999, "failed")
+        assert result is False

@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 COPY bot/ ./bot/
 COPY services/ ./services/
+COPY server/ ./server/
 COPY tests/ ./tests/
 COPY main.py config.py README.md .
 

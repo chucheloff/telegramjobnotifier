@@ -15,7 +15,7 @@ class AdminAuthMiddleware(BaseMiddleware):
         event: Message,
         data: Dict[str, Any],
     ) -> Any:
-        if event.from_user and event.from_user.id not in ADMIN_IDS:
+        if not event.from_user or event.from_user.id not in ADMIN_IDS:
             await event.answer("⛔ Access denied. You are not an authorized admin.")
             return
 
