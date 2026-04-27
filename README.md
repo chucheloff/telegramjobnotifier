@@ -8,7 +8,6 @@ A Telegram bot that forwards messages from you (admin) to one or more Telegram c
 - **Custom Wrappers** — prepend/append text, add timestamps, and channel attribution to every forwarded message
 - **Message Restructuring** — edit message content (text formatting, content modifications) before forwarding
 - **Multi-Channel Support** — forward to multiple channels from a single bot
-- **Media Forwarding** — images, videos, and documents are forwarded as-is
 
 ## Project Structure
 
