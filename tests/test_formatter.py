@@ -36,3 +36,10 @@ def test_format_message_no_timestamp():
     result = format_message("Hello world", include_timestamp=False)
     assert "⏰" not in result
     assert result.strip() == "Hello world"
+
+
+def test_format_message_replaces_timestamp_placeholder_once():
+    result = format_message("Hello world", suffix="Posted at {timestamp}")
+    assert "Posted at " in result
+    assert "{timestamp}" not in result
+    assert "⏰" not in result

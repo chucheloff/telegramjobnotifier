@@ -1,6 +1,11 @@
 from aiogram import Bot, Dispatcher
 
-from config import BOT_TOKEN
+from config import Settings
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+
+def create_bot(settings: Settings) -> Bot:
+    return Bot(token=settings.bot_token)
+
+
+def create_dispatcher() -> Dispatcher:
+    return Dispatcher()

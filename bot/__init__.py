@@ -1,3 +1,3 @@
-from bot.bot import bot, dp
+from bot.bot import create_bot, create_dispatcher
 
-__all__ = ["bot", "dp"]
+__all__ = ["create_bot", "create_dispatcher"]

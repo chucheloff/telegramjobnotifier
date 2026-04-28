@@ -1,13 +1,14 @@
 # Telegram Job Notifier
 
-A Telegram bot that forwards messages from you (admin) to one or more Telegram channels — with custom message wrappers and restructuring.
+A Telegram bot that forwards text messages from approved admins to one or more Telegram channels, with optional message wrappers and timestamps.
 
 ## Features
 
 - **Admin Authentication** — only whitelisted users can send messages to channels
-- **Custom Wrappers** — prepend/append text, add timestamps, and channel attribution to every forwarded message
-- **Message Restructuring** — edit message content (text formatting, content modifications) before forwarding
+- **Custom Wrappers** — prepend/append text and add timestamps to forwarded messages
+- **Message History** — store forwarded text messages in SQLite for lightweight auditing
 - **Multi-Channel Support** — forward to multiple channels from a single bot
+- **Partial Failure Reporting** — continue forwarding if one channel fails
 
 ## Project Structure
 
@@ -24,9 +25,11 @@ telegramjobnotifier/
 ├── services/
 │   ├── __init__.py
 │   ├── forwarder.py         # Core forwarding logic
-│   └── formatter.py         # Custom wrappers and message restructuring
+│   ├── database.py          # SQLite message history
+│   └── formatter.py         # Custom wrappers and timestamp formatting
 ├── tests/
 │   ├── __init__.py
+│   ├── test_database.py
 │   └── test_formatter.py
 └── .gitignore
 ```
@@ -65,7 +68,9 @@ BOT_TOKEN=your_telegram_bot_token
 CHANNEL_IDS=-1001234567890,-1000987654321
 ADMIN_IDS=123456789
 WRAPPER_PREFIX=[Posted via Telegram Job Notifier]
-WRAPPER_SUFFIX=⏰ {timestamp}
+WRAPPER_SUFFIX=Posted at {timestamp}
+INCLUDE_TIMESTAMP=true
+DB_PATH=data/messages.db
 ```
 
 | Variable | Description |
@@ -75,6 +80,8 @@ WRAPPER_SUFFIX=⏰ {timestamp}
 | `ADMIN_IDS` | Comma-separated list of your Telegram user IDs |
 | `WRAPPER_PREFIX` | Text prepended to every forwarded message |
 | `WRAPPER_SUFFIX` | Text appended to every forwarded message |
+| `INCLUDE_TIMESTAMP` | Add a timestamp when prefix/suffix do not include `{timestamp}` |
+| `DB_PATH` | SQLite database path for message history |
 
 ### Getting Your Telegram IDs
 
@@ -99,8 +106,7 @@ Simply send any text message to the bot in a private chat. The bot will:
 | `/start` | Start the bot and show help |
 | `/help` | Show available commands and usage |
 | `/status` | Show current configuration and channel status |
-| `/add_channel <id>` | Add a new target channel |
-| `/remove_channel <id>` | Remove a target channel |
+| `/history` | Show your recent forwarded messages |
 
 ## How It Works
 
@@ -110,8 +116,13 @@ You (Admin) ──→ Telegram Bot ──→ [Auth Check] ──→ [Format Mess
 
 1. **Receive** — Bot receives your message in a private chat
 2. **Authenticate** — Middleware verifies your user ID is in the admin list
-3. **Format** — Formatter applies wrappers and restructuring rules
+3. **Format** — Formatter applies wrappers and timestamp rules
 4. **Forward** — Core forwarder sends the message to all configured channels
+5. **Record** — Successful forwarding targets are saved to SQLite
+
+## Data Storage
+
+The bot stores admin user IDs, chat IDs, message text, timestamps, and successful target channel IDs in SQLite. Set `DB_PATH` to control the database location. Do not use this history database for sensitive content unless that retention behavior is acceptable for your deployment.
 
 ## Development
 

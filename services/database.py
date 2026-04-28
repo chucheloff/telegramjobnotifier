@@ -1,9 +1,15 @@
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 DB_PATH = Path(__file__).parent.parent / "data" / "messages.db"
+
+
+def configure_database(path: str | Path) -> None:
+    global DB_PATH
+    DB_PATH = Path(path)
 
 
 def _get_connection() -> sqlite3.Connection:
@@ -43,28 +49,27 @@ def save_message(
         The ID of the inserted message.
     """
     sent_at = datetime.now(timezone.utc).isoformat()
-    conn = _get_connection()
-    cursor = conn.execute(
-        """
-        INSERT INTO messages
-            (user_id, chat_id, message_text, message_type,
-             sent_at, forwarded_to_channels)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            user_id,
-            chat_id,
-            message_text,
-            message_type,
-            sent_at,
-            ",".join(str(c) for c in forwarded_channels)
-            if forwarded_channels
-            else None,
-        ),
-    )
-    conn.commit()
-    message_id = cursor.lastrowid
-    conn.close()
+    with closing(_get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO messages
+                (user_id, chat_id, message_text, message_type,
+                 sent_at, forwarded_to_channels)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                chat_id,
+                message_text,
+                message_type,
+                sent_at,
+                ",".join(str(c) for c in forwarded_channels)
+                if forwarded_channels
+                else None,
+            ),
+        )
+        conn.commit()
+        message_id = cursor.lastrowid
     return message_id
 
 
@@ -83,50 +88,48 @@ def get_messages(
     Returns:
         List of message dicts.
     """
-    conn = _get_connection()
-    if user_id:
-        cursor = conn.execute(
-            """
-            SELECT id, user_id, chat_id, message_text,
-                   message_type, sent_at, forwarded_to_channels,
-                   created_at
-            FROM messages
-            WHERE user_id = ?
-            ORDER BY sent_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            (user_id, limit, offset),
-        )
-    else:
-        cursor = conn.execute(
-            """
-            SELECT id, user_id, chat_id, message_text,
-                   message_type, sent_at, forwarded_to_channels,
-                   created_at
-            FROM messages
-            ORDER BY sent_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            (limit, offset),
-        )
-    rows = cursor.fetchall()
-    columns = [desc[0] for desc in cursor.description]
-    messages = [dict(zip(columns, row)) for row in rows]
-    conn.close()
+    with closing(_get_connection()) as conn:
+        if user_id is not None:
+            cursor = conn.execute(
+                """
+                SELECT id, user_id, chat_id, message_text,
+                       message_type, sent_at, forwarded_to_channels,
+                       created_at
+                FROM messages
+                WHERE user_id = ?
+                ORDER BY sent_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (user_id, limit, offset),
+            )
+        else:
+            cursor = conn.execute(
+                """
+                SELECT id, user_id, chat_id, message_text,
+                       message_type, sent_at, forwarded_to_channels,
+                       created_at
+                FROM messages
+                ORDER BY sent_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            )
+        rows = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        messages = [dict(zip(columns, row)) for row in rows]
     return messages
 
 
 def get_message_count(user_id: Optional[int] = None) -> int:
     """Get total message count, optionally filtered by user."""
-    conn = _get_connection()
-    if user_id:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM messages WHERE user_id = ?",
-            (user_id,),
-        ).fetchone()[0]
-    else:
-        count = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-    conn.close()
+    with closing(_get_connection()) as conn:
+        if user_id is not None:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM messages WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()[0]
+        else:
+            count = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
     return count
 
 
@@ -136,19 +139,18 @@ def get_recent_users(limit: int = 10) -> list[dict]:
     Returns:
         List of dicts with user_id, message_count, last_seen.
     """
-    conn = _get_connection()
-    cursor = conn.execute(
-        """
-        SELECT user_id, COUNT(*) as message_count, MAX(sent_at) as last_seen
-        FROM messages
-        GROUP BY user_id
-        ORDER BY last_seen DESC
-        LIMIT ?
-        """,
-        (limit,),
-    )
-    rows = cursor.fetchall()
-    columns = [desc[0] for desc in cursor.description]
-    users = [dict(zip(columns, row)) for row in rows]
-    conn.close()
+    with closing(_get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            SELECT user_id, COUNT(*) as message_count, MAX(sent_at) as last_seen
+            FROM messages
+            GROUP BY user_id
+            ORDER BY last_seen DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        users = [dict(zip(columns, row)) for row in rows]
     return users

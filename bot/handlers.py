@@ -1,30 +1,33 @@
-from aiogram import Dispatcher
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import Command
 from aiogram.types import Message
 
-from bot.bot import bot
 from bot.middleware import AdminAuthMiddleware
-from config import (
-    CHANNEL_IDS,
-    WRAPPER_PREFIX,
-    WRAPPER_SUFFIX,
-)
+from config import Settings
 from services.database import (
     get_message_count,
-    get_recent_users,
+    get_messages,
     save_message,
 )
 from services.formatter import format_message
 from services.forwarder import forward_to_channels
 
 
-def register_handlers(dp: Dispatcher) -> None:
+def register_handlers(dp: Dispatcher, bot: Bot, settings: Settings) -> None:
     """Register all bot handlers and middleware."""
-    dp.message.middleware(AdminAuthMiddleware())
-    dp.message.register(forward_message_handler)
-    dp.message.register(start_handler, command="start")
-    dp.message.register(help_handler, command="help")
-    dp.message.register(status_handler, command="status")
-    dp.message.register(history_handler, command="history")
+    dp.message.middleware(AdminAuthMiddleware(settings.admin_ids))
+
+    async def _status_handler(message: Message) -> None:
+        await status_handler(message, settings)
+
+    async def _forward_message_handler(message: Message) -> None:
+        await forward_message_handler(message, bot, settings)
+
+    dp.message.register(start_handler, Command("start"))
+    dp.message.register(help_handler, Command("help"))
+    dp.message.register(_status_handler, Command("status"))
+    dp.message.register(history_handler, Command("history"))
+    dp.message.register(_forward_message_handler, F.text, ~F.text.startswith("/"))
 
 
 async def start_handler(message: Message) -> None:
@@ -44,12 +47,13 @@ async def help_handler(message: Message) -> None:
     await start_handler(message)
 
 
-async def status_handler(message: Message) -> None:
+async def status_handler(message: Message, settings: Settings) -> None:
     total = get_message_count()
+    wrappers_enabled = bool(settings.wrapper_prefix or settings.wrapper_suffix)
     await message.answer(
         f"📊 Status:\n"
-        f"• Channels: {len(CHANNEL_IDS)} configured\n"
-        f"• Wrappers: {'enabled' if WRAPPER_PREFIX or WRAPPER_SUFFIX else 'disabled'}\n"
+        f"• Channels: {len(settings.channel_ids)} configured\n"
+        f"• Wrappers: {'enabled' if wrappers_enabled else 'disabled'}\n"
         f"• Total messages: {total}"
     )
 
@@ -57,20 +61,26 @@ async def status_handler(message: Message) -> None:
 async def history_handler(message: Message) -> None:
     """Show the user's recent forwarded messages."""
     user_id = message.from_user.id
-    messages = get_recent_users(limit=5)
+    messages = get_messages(user_id=user_id, limit=5)
     total = get_message_count(user_id)
 
     if total == 0:
         await message.answer("📭 No messages sent yet.")
         return
 
+    recent = "\n".join(
+        f"• {item['sent_at']}: {(item['message_text'] or '')[:80]}" for item in messages
+    )
     await message.answer(
-        f"📬 You have sent {total} message(s).\n\n"
-        f"Recent users: {', '.join(str(u['user_id']) for u in messages[:3])}"
+        f"📬 You have sent {total} message(s).\n\nRecent messages:\n{recent}"
     )
 
 
-async def forward_message_handler(message: Message) -> None:
+async def forward_message_handler(
+    message: Message,
+    bot: Bot,
+    settings: Settings,
+) -> None:
     """Handle incoming text messages and forward them to configured channels."""
     if not message.text:
         return
@@ -80,24 +90,32 @@ async def forward_message_handler(message: Message) -> None:
 
     formatted_text = format_message(
         text=message.text,
-        prefix=WRAPPER_PREFIX,
-        suffix=WRAPPER_SUFFIX,
+        prefix=settings.wrapper_prefix,
+        suffix=settings.wrapper_suffix,
+        include_timestamp=settings.include_timestamp,
     )
 
     results = await forward_to_channels(
         bot=bot,
+        channel_ids=settings.channel_ids,
         from_chat_id=chat_id,
         message_id=message.message_id,
         formatted_text=formatted_text,
     )
 
-    channel_ids = [r["channel_id"] for r in results]
+    successful_channels = [r["channel_id"] for r in results if r["ok"]]
     save_message(
         user_id=user_id,
         chat_id=chat_id,
         message_text=message.text,
-        forwarded_channels=channel_ids,
+        forwarded_channels=successful_channels,
     )
 
-    success_count = len(results)
-    await message.answer(f"✅ Message forwarded to {success_count} channel(s).")
+    success_count = len(successful_channels)
+    failed_count = len(results) - success_count
+    if failed_count:
+        await message.answer(
+            f"⚠️ Message forwarded to {success_count} channel(s); {failed_count} failed."
+        )
+    else:
+        await message.answer(f"✅ Message forwarded to {success_count} channel(s).")

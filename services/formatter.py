@@ -19,17 +19,18 @@ def format_message(
         The formatted message string.
     """
     parts: list[str] = []
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     if prefix:
-        parts.append(prefix)
+        parts.append(prefix.replace("{timestamp}", timestamp))
 
     parts.append(text)
 
     if suffix:
-        parts.append(suffix)
+        parts.append(suffix.replace("{timestamp}", timestamp))
 
-    if include_timestamp:
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    wrapper_has_timestamp = "{timestamp}" in prefix or "{timestamp}" in suffix
+    if include_timestamp and not wrapper_has_timestamp:
         parts.append(f"⏰ {timestamp}")
 
     return "\n".join(parts)
